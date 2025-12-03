@@ -83,18 +83,18 @@ export class SecretsLoader {
         const nodeEnv = (process.env.NODE_ENV || '').toLowerCase();
         switch (nodeEnv) {
             case 'development':
-                return 'dev';
+                return 'development';
             case 'dev':
-                return 'dev';  // Infisical uses 'dev' as the environment name
+                return 'development';  // Infisical uses 'dev' as the environment name
             case 'staging':
                 return 'staging';
             case 'production':
-                return 'prod';
+                return 'production';
             case 'prod':
-                return 'prod';  // Infisical uses 'prod' as the environment name
+                return 'production';  // Infisical uses 'prod' as the environment name
             default:
                 // Sensible default for local usage
-                return 'dev';  // Infisical default is 'dev'
+                return 'development';  // Infisical default is 'dev'
         }
     }
 
