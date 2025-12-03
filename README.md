@@ -15,6 +15,7 @@ A powerful CLI tool for loading environment secrets before running commands. Per
 
 ```bash
 npm install -g pandora-jar
+npm install -g @infisical/cli@0.43.36
 ```
 
 Or use it locally in your project:
@@ -27,19 +28,17 @@ npm install --save-dev pandora-jar
 
 ### 1. Configure Your Project
 
-Create a `.infisical.json` file in your project root:
+Initialize infisical project
 
-```json
-{
-  "workspaceId": "your-project-id-here"
-}
+```shell
+infisical init
 ```
 
 ### 2. Set Up Authentication
 
 Choose one of the following authentication methods:
 
-#### Option A: SDK Mode (Recommended)
+#### Option A: SDK Mode for Servers
 
 Set environment variables for machine-to-machine authentication:
 
@@ -50,7 +49,6 @@ export INFISICAL_ENVIRONMENT="development"  # Optional: defaults based on NODE_E
 ```
 
 #### Option B: CLI Mode
-
 Ensure you're logged in to the Infisical CLI:
 
 ```bash
@@ -139,7 +137,7 @@ In SDK mode, secrets are automatically polled every 60 seconds:
 
 ```json
 {
-  "workspaceId": "your-project-id-here"
+  "projectId": "your-project-id-here"
 }
 ```
 
