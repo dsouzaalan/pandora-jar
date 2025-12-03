@@ -1,11 +1,85 @@
 import dotenv from 'dotenv';
 import { InfisicalSDK } from '@infisical/sdk';
 import { promises as fs, existsSync, readFileSync } from 'fs';
-import { exec } from 'child_process';
+import { exec, ChildProcess } from 'child_process';
 import { promisify } from 'util';
 import { join, dirname } from 'path';
 
 const execAsync = promisify(exec);
+
+interface ExecResult {
+    stdout: string;
+    stderr: string;
+}
+
+function execWithStreaming(
+    command: string,
+    options: { cwd?: string }
+): Promise<ExecResult> {
+    return new Promise((resolve, reject) => {
+        let stdout = '';
+        let stderr = '';
+        let process: ChildProcess | null = null;
+        let settled = false;
+
+        const settle = (result: ExecResult | Error, isError: boolean) => {
+            if (settled) return;
+            settled = true;
+            if (process && !process.killed) {
+                process.kill();
+            }
+            if (isError) {
+                reject(result);
+            } else {
+                resolve(result as ExecResult);
+            }
+        };
+
+        try {
+            process = exec(command, options);
+
+            if (!process.stdout || !process.stderr) {
+                settle(new Error('Failed to create process streams'), true);
+                return;
+            }
+
+            process.stdout.on('data', (chunk: Buffer) => {
+                const data = chunk.toString();
+                stdout += data;
+                
+                if (data.includes('No valid login session found, triggering login flow')) {
+                    settle(new Error('No valid login session found, triggering login flow'), true);
+                    return;
+                }
+            });
+
+            process.stderr.on('data', (chunk: Buffer) => {
+                const data = chunk.toString();
+                stderr += data;
+                
+                if (data.includes('No valid login session found, triggering login flow')) {
+                    settle(new Error('No valid login session found, triggering login flow'), true);
+                    return;
+                }
+            });
+
+            process.on('close', (code) => {
+                if (settled) return;
+                if (code !== 0 && code !== null) {
+                    settle(new Error(`Command failed with exit code ${code}`), true);
+                } else {
+                    settle({ stdout, stderr }, false);
+                }
+            });
+
+            process.on('error', (error) => {
+                settle(error, true);
+            });
+        } catch (error) {
+            settle(error as Error, true);
+        }
+    });
+}
 
 interface Secrets {
     [key: string]: string;
@@ -111,7 +185,7 @@ export class SecretsLoader {
             // Try with workspace ID first
             const execOptions = { cwd: this.projectRoot };
             try {
-                const result = await execAsync(command, execOptions);
+                const result = await execWithStreaming(command, execOptions);
                 stdout = result.stdout;
                 stderr = result.stderr;
             } catch (error: any) {
@@ -119,14 +193,14 @@ export class SecretsLoader {
                 console.log(`   Retrying without --projectId flag...`);
                 command = `infisical secrets --plain --silent --env=${environment}`;
                 try {
-                    const result = await execAsync(command, execOptions);
+                    const result = await execWithStreaming(command, execOptions);
                     stdout = result.stdout;
                     stderr = result.stderr;
                 } catch (retryError: any) {
                     // Try one more time without --silent to see actual error
                     const debugCommand = `infisical secrets --plain --env=${environment}`;
                     try {
-                        const debugResult = await execAsync(debugCommand, execOptions);
+                        const debugResult = await execWithStreaming(debugCommand, execOptions);
                         stdout = debugResult.stdout;
                         stderr = debugResult.stderr;
                     } catch (debugError: any) {
