@@ -245,7 +245,7 @@ npm run build
 ### Project Structure
 
 ```
-artemis/
+pandora-jar/
 ├── src/
 │   ├── cli.ts           # CLI entry point
 │   └── secrets-loader.ts # Core secrets loading logic
