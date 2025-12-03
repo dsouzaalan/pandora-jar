@@ -28,7 +28,6 @@ export class SecretsLoader {
 
     async initialize(): Promise<void> {
         console.log('Initializing Secrets Loader...');
-        console.log(`NODE_ENV: ${process.env.NODE_ENV || 'not set'}`);
 
         // Primary path: SDK using client id/secret
         try {
@@ -84,28 +83,57 @@ export class SecretsLoader {
         const nodeEnv = (process.env.NODE_ENV || '').toLowerCase();
         switch (nodeEnv) {
             case 'development':
+                return 'dev';
             case 'dev':
-                return 'development';
+                return 'dev';  // Infisical uses 'dev' as the environment name
             case 'staging':
                 return 'staging';
             case 'production':
+                return 'prod';
             case 'prod':
-                return 'production';
+                return 'prod';  // Infisical uses 'prod' as the environment name
             default:
                 // Sensible default for local usage
-                return 'development';
+                return 'dev';  // Infisical default is 'dev'
         }
     }
 
     private async loadFromCLI(): Promise<void> {
         const environment = this.getInfisicalEnvironment();
+        const workspaceId = this.getProjectId();
         console.log(`📋 Loading secrets via CLI for environment: ${environment}`);
-        console.log(`   Note: Only secrets you have access to will be loaded (hidden/tagged secrets are filtered)`);
+
+        let command = `infisical secrets --plain --silent --env=${environment} --projectId=${workspaceId}`;
+        let stdout: string;
+        let stderr: string;
 
         try {
-            const { stdout, stderr } = await execAsync(
-                `infisical secrets --plain --silent --env=${environment}`
-            );
+            // Try with workspace ID first
+            const execOptions = { cwd: this.projectRoot };
+            try {
+                const result = await execAsync(command, execOptions);
+                stdout = result.stdout;
+                stderr = result.stderr;
+            } catch (error: any) {
+                // If --projectId doesn't work, try without it (CLI might auto-detect from .infisical.json)
+                console.log(`   Retrying without --projectId flag...`);
+                command = `infisical secrets --plain --silent --env=${environment}`;
+                try {
+                    const result = await execAsync(command, execOptions);
+                    stdout = result.stdout;
+                    stderr = result.stderr;
+                } catch (retryError: any) {
+                    // Try one more time without --silent to see actual error
+                    const debugCommand = `infisical secrets --plain --env=${environment}`;
+                    try {
+                        const debugResult = await execAsync(debugCommand, execOptions);
+                        stdout = debugResult.stdout;
+                        stderr = debugResult.stderr;
+                    } catch (debugError: any) {
+                        throw retryError; // Throw the original retry error
+                    }
+                }
+            }
 
             // Parse stdout for secrets
             const lines = stdout.trim().split('\n').filter(line => line.trim());
@@ -132,6 +160,7 @@ export class SecretsLoader {
                 console.warn('- No secrets exist in this environment');
                 console.warn('- You don\'t have access to any secrets');
                 console.warn('- CLI authentication failed');
+                console.warn(`- Environment "${environment}" might not exist or have a different name`);
             } else {
                 console.log(`✓ Loaded ${secretCount} accessible secrets from CLI`);
                 if (secretCount > 0) {
