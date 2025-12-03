@@ -31,7 +31,7 @@ Create a `.infisical.json` file in your project root:
 
 ```json
 {
-  "projectId": "your-project-id-here"
+  "workspaceId": "your-project-id-here"
 }
 ```
 
@@ -139,7 +139,7 @@ In SDK mode, secrets are automatically polled every 60 seconds:
 
 ```json
 {
-  "projectId": "your-project-id-here"
+  "workspaceId": "your-project-id-here"
 }
 ```
 
