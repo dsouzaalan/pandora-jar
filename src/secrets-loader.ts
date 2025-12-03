@@ -12,7 +12,7 @@ interface Secrets {
 }
 
 interface InfisicalConfig {
-    projectId: string;
+    workspaceId: string;
 }
 
 export class SecretsLoader {
@@ -28,7 +28,6 @@ export class SecretsLoader {
 
     async initialize(): Promise<void> {
         console.log('Initializing Secrets Loader...');
-        console.log(`NODE_ENV: ${process.env.NODE_ENV || 'not set'}`);
 
         // Primary path: SDK using client id/secret
         try {
@@ -84,28 +83,57 @@ export class SecretsLoader {
         const nodeEnv = (process.env.NODE_ENV || '').toLowerCase();
         switch (nodeEnv) {
             case 'development':
-            case 'dev':
                 return 'development';
+            case 'dev':
+                return 'development';  // Infisical uses 'dev' as the environment name
             case 'staging':
                 return 'staging';
             case 'production':
-            case 'prod':
                 return 'production';
+            case 'prod':
+                return 'production';  // Infisical uses 'prod' as the environment name
             default:
                 // Sensible default for local usage
-                return 'development';
+                return 'development';  // Infisical default is 'dev'
         }
     }
 
     private async loadFromCLI(): Promise<void> {
         const environment = this.getInfisicalEnvironment();
+        const workspaceId = this.getProjectId();
         console.log(`📋 Loading secrets via CLI for environment: ${environment}`);
-        console.log(`   Note: Only secrets you have access to will be loaded (hidden/tagged secrets are filtered)`);
+
+        let command = `infisical secrets --plain --silent --env=${environment} --projectId=${workspaceId}`;
+        let stdout: string;
+        let stderr: string;
 
         try {
-            const { stdout, stderr } = await execAsync(
-                `infisical secrets --plain --silent --env=${environment}`
-            );
+            // Try with workspace ID first
+            const execOptions = { cwd: this.projectRoot };
+            try {
+                const result = await execAsync(command, execOptions);
+                stdout = result.stdout;
+                stderr = result.stderr;
+            } catch (error: any) {
+                // If --projectId doesn't work, try without it (CLI might auto-detect from .infisical.json)
+                console.log(`   Retrying without --projectId flag...`);
+                command = `infisical secrets --plain --silent --env=${environment}`;
+                try {
+                    const result = await execAsync(command, execOptions);
+                    stdout = result.stdout;
+                    stderr = result.stderr;
+                } catch (retryError: any) {
+                    // Try one more time without --silent to see actual error
+                    const debugCommand = `infisical secrets --plain --env=${environment}`;
+                    try {
+                        const debugResult = await execAsync(debugCommand, execOptions);
+                        stdout = debugResult.stdout;
+                        stderr = debugResult.stderr;
+                    } catch (debugError: any) {
+                        throw retryError; // Throw the original retry error
+                    }
+                }
+            }
 
             // Parse stdout for secrets
             const lines = stdout.trim().split('\n').filter(line => line.trim());
@@ -132,6 +160,7 @@ export class SecretsLoader {
                 console.warn('- No secrets exist in this environment');
                 console.warn('- You don\'t have access to any secrets');
                 console.warn('- CLI authentication failed');
+                console.warn(`- Environment "${environment}" might not exist or have a different name`);
             } else {
                 console.log(`✓ Loaded ${secretCount} accessible secrets from CLI`);
                 if (secretCount > 0) {
@@ -162,9 +191,9 @@ export class SecretsLoader {
         if (!existsSync(configPath)) {
             throw new Error(
                 `.infisical.json not found in ${this.projectRoot}\n` +
-                'Please create .infisical.json with your Infisical project ID:\n' +
+                'Please create .infisical.json with your Infisical workspace ID:\n' +
                 '{\n' +
-                '  "projectId": "your-project-id-here"\n' +
+                '  "workspaceId": "your-workspace-id-here"\n' +
                 '}'
             );
         }
@@ -173,35 +202,35 @@ export class SecretsLoader {
             const configContent = readFileSync(configPath, 'utf8');
             const configData = JSON.parse(configContent) as InfisicalConfig;
             
-            if (!configData || !configData.projectId) {
+            if (!configData || !configData.workspaceId) {
                 throw new Error(
-                    'projectId is required in .infisical.json\n' +
+                    'workspaceId is required in .infisical.json\n' +
                     'Please ensure your .infisical.json contains:\n' +
                     '{\n' +
-                    '  "projectId": "your-project-id-here"\n' +
+                    '  "workspaceId": "your-workspace-id-here"\n' +
                     '}'
                 );
             }
             
-            if (typeof configData.projectId !== 'string' || configData.projectId.trim() === '') {
+            if (typeof configData.workspaceId !== 'string' || configData.workspaceId.trim() === '') {
                 throw new Error(
-                    'projectId in .infisical.json must be a non-empty string'
+                    'workspaceId in .infisical.json must be a non-empty string'
                 );
             }
             
-            return configData.projectId.trim();
+            return configData.workspaceId.trim();
         } catch (error: any) {
             if (error instanceof SyntaxError) {
                 throw new Error(
                     `Invalid JSON in .infisical.json: ${error.message}\n` +
                     'Please ensure .infisical.json contains valid JSON:\n' +
                     '{\n' +
-                    '  "projectId": "your-project-id-here"\n' +
+                    '  "workspaceId": "your-workspace-id-here"\n' +
                     '}'
                 );
             }
           
-            if (error.message && error.message.includes('projectId')) {
+            if (error.message && error.message.includes('workspaceId')) {
                 throw error;
             }
             
@@ -235,7 +264,7 @@ export class SecretsLoader {
         const projectId = this.getProjectId();
         console.log('Initializing Infisical SDK...');
         console.log(`   Environment: ${process.env.INFISICAL_ENVIRONMENT || 'production'}`);
-        console.log(`   Project ID: ${projectId}`);
+        console.log(`   Workspace ID: ${projectId}`);
         if (siteUrl) {
             console.log(`   Base URL: ${siteUrl}`);
         }
@@ -276,7 +305,7 @@ export class SecretsLoader {
             const environment = this.getInfisicalEnvironment();
 
             console.log(`Fetching secrets from Infisical (${environment})...`);
-            console.log(`   Project ID: ${projectId}`);
+            console.log(`   Workspace ID: ${projectId}`);
             console.log(`   Environment: ${environment}`);
             console.log(`   Note: Only secrets accessible to this machine identity will be loaded`);
 
