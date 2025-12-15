@@ -15,13 +15,23 @@ program
 program
     .command('run')
     .description('Load Infisical secrets and execute a command')
+    .option('--env <environment>', 'Specify the Infisical environment to load secrets from')
+    .option('--slug <path>', 'Specify the slug path (for future use)')
     .allowUnknownOption()
     .allowExcessArguments(true)
-    .action(async () => {
+    .action(async (options) => {
         try {
             dotenv.config();
 
-            const loader = new SecretsLoader(process.cwd());
+            const environment = options.env;
+            const slug = options.slug;
+
+            // Set NODE_ENV if --env flag is provided
+            if (environment) {
+                process.env.NODE_ENV = environment;
+            }
+
+            const loader = new SecretsLoader(process.cwd(), environment, slug);
             await loader.initialize();
 
             const dashDashIndex = process.argv.indexOf('--');

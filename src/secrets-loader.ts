@@ -95,9 +95,18 @@ export class SecretsLoader {
     private envBackupPath = './.env_backup';
     private usingSDK = false;
     private projectRoot: string;
+    private cliEnvironment?: string;
+    private cliSlug?: string;
 
-    constructor(projectRoot: string = process.cwd()) {
+    constructor(projectRoot: string = process.cwd(), environment?: string, slug?: string) {
         this.projectRoot = projectRoot;
+        this.cliEnvironment = environment;
+        this.cliSlug = slug;
+        
+
+        if (slug) {
+            // TODO: Implement slug loading
+        }
     }
 
     async initialize(): Promise<void> {
@@ -148,6 +157,12 @@ export class SecretsLoader {
     }
 
     private getInfisicalEnvironment(): string {
+        // CLI flag has highest priority
+        if (this.cliEnvironment && this.cliEnvironment.trim()) {
+            console.log(`Using environment from CLI flag: ${this.cliEnvironment.trim()}`);
+            return this.cliEnvironment.trim();
+        }
+
         // Explicit override takes precedence
         const explicitEnv = process.env.INFISICAL_ENVIRONMENT;
         if (explicitEnv && explicitEnv.trim()) {
