@@ -16,7 +16,7 @@ program
     .command('run')
     .description('Load Infisical secrets and execute a command')
     .option('--env <environment>', 'Specify the Infisical environment to load secrets from')
-    .option('--slug <path>', 'Specify the slug path (for future use)')
+    .option('--path <path>', 'Specify the secret path in Infisical (default: /)')
     .allowUnknownOption()
     .allowExcessArguments(true)
     .action(async (options) => {
@@ -24,14 +24,14 @@ program
             dotenv.config();
 
             const environment = options.env;
-            const slug = options.slug;
+            const path = options.path;
 
             // Set NODE_ENV if --env flag is provided
             if (environment) {
                 process.env.NODE_ENV = environment;
             }
 
-            const loader = new SecretsLoader(process.cwd(), environment, slug);
+            const loader = new SecretsLoader(process.cwd(), environment, path);
             await loader.initialize();
 
             const dashDashIndex = process.argv.indexOf('--');
