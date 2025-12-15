@@ -159,7 +159,6 @@ export class SecretsLoader {
     private getInfisicalEnvironment(): string {
         // CLI flag has highest priority
         if (this.cliEnvironment && this.cliEnvironment.trim()) {
-            console.log(`Using environment from CLI flag: ${this.cliEnvironment.trim()}`);
             return this.cliEnvironment.trim();
         }
 
