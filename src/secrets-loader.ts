@@ -95,9 +95,15 @@ export class SecretsLoader {
     private envBackupPath = './.env_backup';
     private usingSDK = false;
     private projectRoot: string;
+    private secretPath: string;
 
-    constructor(projectRoot: string = process.cwd()) {
+    constructor(projectRoot: string = process.cwd(), path?: string) {
         this.projectRoot = projectRoot;
+        this.secretPath = path || '/';
+        
+        if (path) {
+            console.log(`Using secret path: ${path}`);
+        }
     }
 
     async initialize(): Promise<void> {
@@ -148,27 +154,26 @@ export class SecretsLoader {
     }
 
     private getInfisicalEnvironment(): string {
-        // Explicit override takes precedence
         const explicitEnv = process.env.INFISICAL_ENVIRONMENT;
         if (explicitEnv && explicitEnv.trim()) {
             return explicitEnv.trim();
         }
-
+        // Explicit override takes precedence
         const nodeEnv = (process.env.NODE_ENV || '').toLowerCase();
         switch (nodeEnv) {
             case 'development':
                 return 'development';
             case 'dev':
-                return 'development';  // Infisical uses 'dev' as the environment name
+                return 'development'; 
             case 'staging':
                 return 'staging';
             case 'production':
                 return 'production';
             case 'prod':
-                return 'production';  // Infisical uses 'prod' as the environment name
+                return 'production';  
             default:
                 // Sensible default for local usage
-                return 'development';  // Infisical default is 'dev'
+                return 'development';  
         }
     }
 
@@ -176,8 +181,9 @@ export class SecretsLoader {
         const environment = this.getInfisicalEnvironment();
         const workspaceId = this.getProjectId();
         console.log(`📋 Loading secrets via CLI for environment: ${environment}`);
+        console.log(`   Secret Path: ${this.secretPath}`);
 
-        let command = `infisical secrets --plain --silent --env=${environment} --projectId=${workspaceId}`;
+        let command = `infisical secrets --plain --silent --env=${environment} --projectId=${workspaceId} --path=${this.secretPath}`;
         let stdout: string;
         let stderr: string;
 
@@ -191,14 +197,14 @@ export class SecretsLoader {
             } catch (error: any) {
                 // If --projectId doesn't work, try without it (CLI might auto-detect from .infisical.json)
                 console.log(`   Retrying without --projectId flag...`);
-                command = `infisical secrets --plain --silent --env=${environment}`;
+                command = `infisical secrets --plain --silent --env=${environment} --path=${this.secretPath}`;
                 try {
                     const result = await execWithStreaming(command, execOptions);
                     stdout = result.stdout;
                     stderr = result.stderr;
                 } catch (retryError: any) {
                     // Try one more time without --silent to see actual error
-                    const debugCommand = `infisical secrets --plain --env=${environment}`;
+                    const debugCommand = `infisical secrets --plain --env=${environment} --path=${this.secretPath}`;
                     try {
                         const debugResult = await execWithStreaming(debugCommand, execOptions);
                         stdout = debugResult.stdout;
@@ -381,12 +387,13 @@ export class SecretsLoader {
             console.log(`Fetching secrets from Infisical (${environment})...`);
             console.log(`   Workspace ID: ${projectId}`);
             console.log(`   Environment: ${environment}`);
+            console.log(`   Secret Path: ${this.secretPath}`);
             console.log(`   Note: Only secrets accessible to this machine identity will be loaded`);
 
             const response = await this.client!.secrets().listSecrets({
                 projectId: projectId,
                 environment: environment,
-                secretPath: '/',
+                secretPath: this.secretPath,
             });
 
             // In v4.0.0+, response has a 'secrets' property containing the array
