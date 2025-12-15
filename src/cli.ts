@@ -31,7 +31,7 @@ program
                 process.env.NODE_ENV = environment;
             }
 
-            const loader = new SecretsLoader(process.cwd(), environment, path);
+            const loader = new SecretsLoader(process.cwd(), path);
             await loader.initialize();
 
             const dashDashIndex = process.argv.indexOf('--');

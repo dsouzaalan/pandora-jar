@@ -95,12 +95,10 @@ export class SecretsLoader {
     private envBackupPath = './.env_backup';
     private usingSDK = false;
     private projectRoot: string;
-    private cliEnvironment?: string;
     private secretPath: string;
 
-    constructor(projectRoot: string = process.cwd(), environment?: string, path?: string) {
+    constructor(projectRoot: string = process.cwd(), path?: string) {
         this.projectRoot = projectRoot;
-        this.cliEnvironment = environment;
         this.secretPath = path || '/';
         
         if (path) {
@@ -156,32 +154,26 @@ export class SecretsLoader {
     }
 
     private getInfisicalEnvironment(): string {
-        // CLI flag has highest priority
-        if (this.cliEnvironment && this.cliEnvironment.trim()) {
-            return this.cliEnvironment.trim();
-        }
-
-        // Explicit override takes precedence
         const explicitEnv = process.env.INFISICAL_ENVIRONMENT;
         if (explicitEnv && explicitEnv.trim()) {
             return explicitEnv.trim();
         }
-
+        // Explicit override takes precedence
         const nodeEnv = (process.env.NODE_ENV || '').toLowerCase();
         switch (nodeEnv) {
             case 'development':
                 return 'development';
             case 'dev':
-                return 'development';  // Infisical uses 'dev' as the environment name
+                return 'development'; 
             case 'staging':
                 return 'staging';
             case 'production':
                 return 'production';
             case 'prod':
-                return 'production';  // Infisical uses 'prod' as the environment name
+                return 'production';  
             default:
                 // Sensible default for local usage
-                return 'development';  // Infisical default is 'dev'
+                return 'development';  
         }
     }
 
