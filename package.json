@@ -1,6 +1,6 @@
 {
   "name": "pandora-jar",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "CLI tool to load secrets from infisical or from backup .env before running any command.",
   "main": "dist/cli.js",
   "bin": {
@@ -33,4 +33,3 @@
     "dist"
   ]
 }
-
