@@ -2,10 +2,7 @@ import dotenv from 'dotenv';
 import { InfisicalSDK } from '@infisical/sdk';
 import { promises as fs, existsSync, readFileSync } from 'fs';
 import { exec, ChildProcess } from 'child_process';
-import { promisify } from 'util';
-import { join, dirname } from 'path';
-
-const execAsync = promisify(exec);
+import { join } from 'path';
 
 interface ExecResult {
     stdout: string;
@@ -46,7 +43,7 @@ function execWithStreaming(
             process.stdout.on('data', (chunk: Buffer) => {
                 const data = chunk.toString();
                 stdout += data;
-                
+
                 if (data.includes('No valid login session found, triggering login flow')) {
                     settle(new Error('No valid login session found, triggering login flow'), true);
                     return;
@@ -56,7 +53,7 @@ function execWithStreaming(
             process.stderr.on('data', (chunk: Buffer) => {
                 const data = chunk.toString();
                 stderr += data;
-                
+
                 if (data.includes('No valid login session found, triggering login flow')) {
                     settle(new Error('No valid login session found, triggering login flow'), true);
                     return;
@@ -210,17 +207,7 @@ export class SecretsLoader {
             }
 
             // Parse stdout for secrets
-            const lines = stdout.trim().split('\n').filter(line => line.trim());
-
-            this.secrets = {};
-            for (const line of lines) {
-                const equalIndex = line.indexOf('=');
-                if (equalIndex > 0) {
-                    const key = line.substring(0, equalIndex);
-                    const value = line.substring(equalIndex + 1);
-                    this.secrets[key] = value;
-                }
-            }
+            this.secrets = dotenv.parse(stdout);
 
             const secretCount = Object.keys(this.secrets).length;
 
@@ -237,9 +224,7 @@ export class SecretsLoader {
                 console.warn(`- Environment "${environment}" might not exist or have a different name`);
             } else {
                 console.log(`✓ Loaded ${secretCount} accessible secrets from CLI`);
-                if (secretCount > 0) {
-                    console.log(`   Note: Some secrets may be hidden if you don't have access (tags/permissions)`);
-                }
+                console.log(`   Note: Some secrets may be hidden if you don't have access (tags/permissions)`);
             }
         } catch (error: any) {
             // Check if we got any secrets before the error
@@ -271,11 +256,11 @@ export class SecretsLoader {
                 '}'
             );
         }
-        
+
         try {
             const configContent = readFileSync(configPath, 'utf8');
             const configData = JSON.parse(configContent) as InfisicalConfig;
-            
+
             if (!configData || !configData.workspaceId) {
                 throw new Error(
                     'workspaceId is required in .infisical.json\n' +
@@ -285,13 +270,13 @@ export class SecretsLoader {
                     '}'
                 );
             }
-            
+
             if (typeof configData.workspaceId !== 'string' || configData.workspaceId.trim() === '') {
                 throw new Error(
                     'workspaceId in .infisical.json must be a non-empty string'
                 );
             }
-            
+
             return configData.workspaceId.trim();
         } catch (error: any) {
             if (error instanceof SyntaxError) {
@@ -303,11 +288,11 @@ export class SecretsLoader {
                     '}'
                 );
             }
-          
+
             if (error.message && error.message.includes('workspaceId')) {
                 throw error;
             }
-            
+
             throw new Error(
                 `Failed to read .infisical.json: ${error.message}\n` +
                 'Please ensure the file exists and is readable.'
@@ -405,7 +390,6 @@ export class SecretsLoader {
             return;
         } catch (error: any) {
             const errorMsg = error.message || String(error);
-            const errorStack = error.stack || '';
 
             console.error(`Failed to fetch secrets from Infisical:`);
             console.error(`   Error: ${errorMsg}`);
@@ -434,9 +418,11 @@ export class SecretsLoader {
             }
 
             const backupPath = join(this.projectRoot, this.envBackupPath);
-            // Save .env_backup file
+            // Save .env_backup file. Escapes: backslash, double-quote, newline, carriage return for dotenv.parse().
+            const escapeEnvValue = (v: string) =>
+                v.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
             const envContent = Object.entries(this.secrets)
-                .map(([key, value]) => `${key}=${value}`)
+                .map(([key, value]) => `${key}="${escapeEnvValue(value)}"`)
                 .join('\n');
             await fs.writeFile(backupPath, envContent);
 
@@ -452,17 +438,7 @@ export class SecretsLoader {
             const backupPath = join(this.projectRoot, this.envBackupPath);
             await fs.access(backupPath);
             const envData = await fs.readFile(backupPath, 'utf8');
-            const lines = envData.trim().split('\n').filter(line => line.trim() && !line.startsWith('#'));
-
-            this.secrets = {};
-            for (const line of lines) {
-                const equalIndex = line.indexOf('=');
-                if (equalIndex > 0) {
-                    const key = line.substring(0, equalIndex);
-                    const value = line.substring(equalIndex + 1);
-                    this.secrets[key] = value;
-                }
-            }
+            this.secrets = dotenv.parse(envData);
             console.log(`Loaded ${Object.keys(this.secrets).length} secrets from .env_backup`);
         } catch (error: any) {
             if (error.code === 'ENOENT') {
@@ -492,8 +468,8 @@ export class SecretsLoader {
 
                 // Always update .env_backup during polling
                 await this.saveBackup();
-                    console.log('Polling completed successfully - .env_backup updated');
-                
+                console.log('Polling completed successfully - .env_backup updated');
+
                 // Update process.env with new secrets
                 this.populateEnv();
             } catch (error: any) {
