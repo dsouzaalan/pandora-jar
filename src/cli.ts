@@ -10,7 +10,7 @@ const program = new Command();
 program
     .name('pandora-jar')
     .description('CLI tool to load Infisical secrets before running Node.js scripts')
-    .version('1.0.0');
+    .version('1.1.1');
 
 program
     .command('run')
