@@ -17,9 +17,11 @@ program
     .description('Load Infisical secrets and execute a command')
     .option('--env <environment>', 'Specify the Infisical environment to load secrets from')
     .option('--path <path>', 'Specify the secret path in Infisical (default: /)')
+    .option('--quiet', 'Suppress all console output from the secrets loader')
     .allowUnknownOption()
     .allowExcessArguments(true)
     .action(async (options) => {
+        const quiet = options.quiet || false;
         try {
             dotenv.config();
 
@@ -31,20 +33,20 @@ program
                 process.env.NODE_ENV = environment;
             }
 
-            const loader = new SecretsLoader(process.cwd(), path);
+            const loader = new SecretsLoader(process.cwd(), path, quiet);
             await loader.initialize();
 
             const dashDashIndex = process.argv.indexOf('--');
-            
+
             if (dashDashIndex === -1 || dashDashIndex === process.argv.length - 1) {
-                console.error('No command provided after --');
+                if (!quiet) console.error('No command provided after --');
                 process.exit(1);
             }
 
             const command = process.argv.slice(dashDashIndex + 1);
-            
+
             if (command.length === 0) {
-                console.error('No command provided');
+                if (!quiet) console.error('No command provided');
                 process.exit(1);
             }
 
@@ -57,7 +59,7 @@ program
             });
 
             child.on('error', (error) => {
-                console.error('Failed to execute command: ', error);
+                if (!quiet) console.error('Failed to execute command: ', error);
                 process.exit(1);
             });
 
@@ -65,7 +67,7 @@ program
                 process.exit(code || 0);
             });
         } catch (error: any) {
-            console.error('Failed to load secrets: ', error);
+            if (!quiet) console.error('Failed to load secrets: ', error);
             process.exit(1);
         }
     });

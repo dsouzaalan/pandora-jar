@@ -93,44 +93,58 @@ export class SecretsLoader {
     private usingSDK = false;
     private projectRoot: string;
     private secretPath: string;
+    private quiet: boolean;
 
-    constructor(projectRoot: string = process.cwd(), path?: string) {
+    private log(message: string): void {
+        if (!this.quiet) console.log(message);
+    }
+
+    private warn(message: string): void {
+        if (!this.quiet) console.warn(message);
+    }
+
+    private logError(message: string): void {
+        if (!this.quiet) console.error(message);
+    }
+
+    constructor(projectRoot: string = process.cwd(), path?: string, quiet: boolean = false) {
         this.projectRoot = projectRoot;
         this.secretPath = path || '/';
+        this.quiet = quiet;
 
         if (path) {
-            console.log(`Using secret path: ${path}`);
+            this.log(`Using secret path: ${path}`);
         }
     }
 
     async initialize(): Promise<void> {
-        console.log('Initializing Secrets Loader...');
+        this.log('Initializing Secrets Loader...');
 
         // Primary path: SDK using client id/secret
         try {
-            console.log('Primary mode: SDK (client credentials)');
+            this.log('Primary mode: SDK (client credentials)');
             await this.initSDK();
             await this.loadSecrets();
             await this.saveBackup();
             this.usingSDK = true;
-            console.log('Secrets Loader initialized successfully from Infisical SDK');
+            this.log('Secrets Loader initialized successfully from Infisical SDK');
             this.startPolling();
         } catch (sdkError: any) {
-            console.error(`Failed to initialize via SDK: ${sdkError.message || sdkError}`);
-            console.log('Falling back to Infisical CLI (requires logged-in CLI)...');
+            this.logError(`Failed to initialize via SDK: ${sdkError.message || sdkError}`);
+            this.log('Falling back to Infisical CLI (requires logged-in CLI)...');
 
             // Fallback path: CLI (no backup or polling in pure CLI mode)
             try {
                 await this.loadFromCLI();
-                console.log('Secrets Loader initialized successfully from Infisical CLI');
+                this.log('Secrets Loader initialized successfully from Infisical CLI');
             } catch (cliError: any) {
-                console.error(`Failed to initialize via CLI: ${cliError.message || cliError}`);
-                console.log('Attempting to load from backup...');
+                this.logError(`Failed to initialize via CLI: ${cliError.message || cliError}`);
+                this.log('Attempting to load from backup...');
                 try {
                     await this.loadBackup();
-                    console.log('Using backup secrets (Infisical unavailable)');
+                    this.log('Using backup secrets (Infisical unavailable)');
                 } catch (backupError: any) {
-                    console.error(`No backup available: ${backupError.message || backupError}`);
+                    this.logError(`No backup available: ${backupError.message || backupError}`);
                     // Re-throw the original SDK error to indicate primary failure
                     throw sdkError;
                 }
@@ -177,8 +191,8 @@ export class SecretsLoader {
     private async loadFromCLI(): Promise<void> {
         const environment = this.getInfisicalEnvironment();
         const workspaceId = this.getProjectId();
-        console.log(`📋 Loading secrets via CLI for environment: ${environment}`);
-        console.log(`   Secret Path: ${this.secretPath}`);
+        this.log(`📋 Loading secrets via CLI for environment: ${environment}`);
+        this.log(`   Secret Path: ${this.secretPath}`);
 
         let command = `infisical export --plain --silent --env=${environment} --projectId=${workspaceId} --path=${this.secretPath}`;
         let stdout: string;
@@ -193,7 +207,7 @@ export class SecretsLoader {
                 stderr = result.stderr;
             } catch (error: any) {
                 // If --projectId doesn't work, try without it (CLI might auto-detect from .infisical.json)
-                console.log(`   Retrying without --projectId flag...`);
+                this.log(`   Retrying without --projectId flag...`);
                 command = `infisical export --env=${environment} --path=${this.secretPath}`;
                 try {
                     const result = await execWithStreaming(command, execOptions);
@@ -219,18 +233,18 @@ export class SecretsLoader {
 
             // Check if stderr has warnings about inaccessible secrets
             if (stderr && stderr.trim()) {
-                console.warn(`CLI warnings: ${stderr.trim()}`);
+                this.warn(`CLI warnings: ${stderr.trim()}`);
             }
 
             if (secretCount === 0) {
-                console.warn('No secrets loaded from CLI. This could mean:');
-                console.warn('- No secrets exist in this environment');
-                console.warn('- You don\'t have access to any secrets');
-                console.warn('- CLI authentication failed');
-                console.warn(`- Environment "${environment}" might not exist or have a different name`);
+                this.warn('No secrets loaded from CLI. This could mean:');
+                this.warn('- No secrets exist in this environment');
+                this.warn('- You don\'t have access to any secrets');
+                this.warn('- CLI authentication failed');
+                this.warn(`- Environment "${environment}" might not exist or have a different name`);
             } else {
-                console.log(`✓ Loaded ${secretCount} accessible secrets from CLI`);
-                console.log(`   Note: Some secrets may be hidden if you don't have access (tags/permissions)`);
+                this.log(`✓ Loaded ${secretCount} accessible secrets from CLI`);
+                this.log(`   Note: Some secrets may be hidden if you don't have access (tags/permissions)`);
             }
         } catch (error: any) {
             // Check if we got any secrets before the error
@@ -238,14 +252,14 @@ export class SecretsLoader {
 
             if (secretCount > 0) {
                 // We got some secrets before failing - use them
-                console.warn(`CLI encountered an error but loaded ${secretCount} secrets before failure`);
-                console.warn(`Error: ${error.message || error}`);
-                console.log(`Using ${secretCount} accessible secrets that were loaded`);
+                this.warn(`CLI encountered an error but loaded ${secretCount} secrets before failure`);
+                this.warn(`Error: ${error.message || error}`);
+                this.log(`Using ${secretCount} accessible secrets that were loaded`);
                 return; // Don't throw - we have some secrets to use
             }
 
             // No secrets loaded - this is a real failure
-            console.error(`CLI load failed: ${error.message || error}`);
+            this.logError(`CLI load failed: ${error.message || error}`);
             throw error;
         }
     }
@@ -327,14 +341,14 @@ export class SecretsLoader {
         }
 
         const projectId = this.getProjectId();
-        console.log('Initializing Infisical SDK...');
-        console.log(`   Environment: ${process.env.INFISICAL_ENVIRONMENT || 'production'}`);
-        console.log(`   Workspace ID: ${projectId}`);
+        this.log('Initializing Infisical SDK...');
+        this.log(`   Environment: ${process.env.INFISICAL_ENVIRONMENT || 'production'}`);
+        this.log(`   Workspace ID: ${projectId}`);
         if (siteUrl) {
-            console.log(`   Base URL: ${siteUrl}`);
+            this.log(`   Base URL: ${siteUrl}`);
         }
-        console.log(`   Client ID length: ${clientId.length} chars`);
-        console.log(`   Client Secret length: ${clientSecret.length} chars`);
+        this.log(`   Client ID length: ${clientId.length} chars`);
+        this.log(`   Client Secret length: ${clientSecret.length} chars`);
 
         try {
             const clientConfig: any = {};
@@ -346,7 +360,7 @@ export class SecretsLoader {
 
             this.client = new InfisicalSDK(clientConfig);
 
-            console.log('✓ Infisical SDK client created');
+            this.log('✓ Infisical SDK client created');
 
             // Authenticate using Universal Auth (v4.0.0+ API)
             await this.client.auth().universalAuth.login({
@@ -354,11 +368,11 @@ export class SecretsLoader {
                 clientSecret: clientSecret,
             });
 
-            console.log('Successfully authenticated with Infisical');
+            this.log('Successfully authenticated with Infisical');
         } catch (error: any) {
-            console.error(`Failed to create/authenticate SDK client: ${error.message || error}`);
+            this.logError(`Failed to create/authenticate SDK client: ${error.message || error}`);
             if (error.stack) {
-                console.error(`   Stack: ${error.stack}`);
+                this.logError(`   Stack: ${error.stack}`);
             }
             throw error;
         }
@@ -369,11 +383,11 @@ export class SecretsLoader {
             const projectId = this.getProjectId();
             const environment = this.getInfisicalEnvironment();
 
-            console.log(`Fetching secrets from Infisical (${environment})...`);
-            console.log(`   Workspace ID: ${projectId}`);
-            console.log(`   Environment: ${environment}`);
-            console.log(`   Secret Path: ${this.secretPath}`);
-            console.log(`   Note: Only secrets accessible to this machine identity will be loaded`);
+            this.log(`Fetching secrets from Infisical (${environment})...`);
+            this.log(`   Workspace ID: ${projectId}`);
+            this.log(`   Environment: ${environment}`);
+            this.log(`   Secret Path: ${this.secretPath}`);
+            this.log(`   Note: Only secrets accessible to this machine identity will be loaded`);
 
             const response = await this.client!.secrets().listSecrets({
                 projectId: projectId,
@@ -390,24 +404,24 @@ export class SecretsLoader {
             }, {});
 
             const secretCount = Object.keys(this.secrets).length;
-            console.log(`Successfully loaded ${secretCount} accessible secrets from Infisical SDK`);
+            this.log(`Successfully loaded ${secretCount} accessible secrets from Infisical SDK`);
             if (secretCount > 0) {
-                console.log(`   Note: Hidden/tagged secrets without access are automatically filtered`);
+                this.log(`   Note: Hidden/tagged secrets without access are automatically filtered`);
             }
             return;
         } catch (error: any) {
             const errorMsg = error.message || String(error);
 
-            console.error(`Failed to fetch secrets from Infisical:`);
-            console.error(`   Error: ${errorMsg}`);
+            this.logError(`Failed to fetch secrets from Infisical:`);
+            this.logError(`   Error: ${errorMsg}`);
 
             // Log more details if available
             if (error.response) {
-                console.error(`   Status: ${error.response.status}`);
-                console.error(`   Data: ${JSON.stringify(error.response.data)}`);
+                this.logError(`   Status: ${error.response.status}`);
+                this.logError(`   Data: ${JSON.stringify(error.response.data)}`);
             }
             if (error.code) {
-                console.error(`   Code: ${error.code}`);
+                this.logError(`   Code: ${error.code}`);
             }
 
             // Let callers decide how to handle fallback (CLI, backup, etc.)
@@ -420,7 +434,7 @@ export class SecretsLoader {
             const secretCount = Object.keys(this.secrets).length;
 
             if (secretCount === 0) {
-                console.warn('No secrets to save to backup');
+                this.warn('No secrets to save to backup');
                 return;
             }
 
@@ -433,9 +447,9 @@ export class SecretsLoader {
                 .join('\n');
             await fs.writeFile(backupPath, envContent);
 
-            console.log(`Backup saved successfully: ${backupPath} (${secretCount} secrets)`);
+            this.log(`Backup saved successfully: ${backupPath} (${secretCount} secrets)`);
         } catch (error: any) {
-            console.error(`Failed to save backup: ${error.message || error}`);
+            this.logError(`Failed to save backup: ${error.message || error}`);
             throw error;
         }
     }
@@ -446,23 +460,23 @@ export class SecretsLoader {
             await fs.access(backupPath);
             const envData = await fs.readFile(backupPath, 'utf8');
             this.secrets = dotenv.parse(envData);
-            console.log(`Loaded ${Object.keys(this.secrets).length} secrets from .env_backup`);
+            this.log(`Loaded ${Object.keys(this.secrets).length} secrets from .env_backup`);
         } catch (error: any) {
             if (error.code === 'ENOENT') {
                 throw new Error('No backup file found (.env_backup)');
             }
-            console.error('Failed to load backup:', error);
+            this.logError('Failed to load backup:' + error);
             throw new Error('No backup available and Infisical is unavailable');
         }
     }
 
     private startPolling(): void {
-        console.log('Starting secret polling (every 60 seconds)...\n');
-        console.log('   Backup file: .env_backup will be updated automatically\n');
+        this.log('Starting secret polling (every 60 seconds)...\n');
+        this.log('   Backup file: .env_backup will be updated automatically\n');
 
         setInterval(async () => {
             const timestamp = new Date().toISOString();
-            console.log(`\n[${timestamp}] Polling secrets from Infisical...`);
+            this.log(`\n[${timestamp}] Polling secrets from Infisical...`);
 
             try {
                 const previousCount = Object.keys(this.secrets).length;
@@ -470,18 +484,18 @@ export class SecretsLoader {
                 const currentCount = Object.keys(this.secrets).length;
 
                 if (currentCount !== previousCount) {
-                    console.log(`Secret count changed: ${previousCount} → ${currentCount}`);
+                    this.log(`Secret count changed: ${previousCount} → ${currentCount}`);
                 }
 
                 // Always update .env_backup during polling
                 await this.saveBackup();
-                console.log('Polling completed successfully - .env_backup updated');
+                this.log('Polling completed successfully - .env_backup updated');
 
                 // Update process.env with new secrets
                 this.populateEnv();
             } catch (error: any) {
-                console.error(`Polling failed: ${error.message || error}`);
-                console.log('Will retry on next polling cycle');
+                this.logError(`Polling failed: ${error.message || error}`);
+                this.log('Will retry on next polling cycle');
             }
         }, 60000); // 60 seconds = 1 minute
     }
