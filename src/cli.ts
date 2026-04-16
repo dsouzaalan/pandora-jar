@@ -23,7 +23,7 @@ program
     .action(async (options) => {
         const quiet = options.quiet || false;
         try {
-            dotenv.config();
+            dotenv.config({ quiet: quiet });
 
             const environment = options.env;
             const path = options.path;
