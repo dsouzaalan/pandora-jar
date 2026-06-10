@@ -183,8 +183,7 @@ export class SecretsLoader {
             case 'prod':
                 return 'production';
             default:
-                // Sensible default for local usage
-                return 'development';
+                return nodeEnv || 'development';
         }
     }
 
