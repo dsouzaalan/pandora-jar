@@ -2,6 +2,7 @@
 
 import { Command } from 'commander';
 import { spawn } from 'child_process';
+import os from 'os';
 import dotenv from 'dotenv';
 import { SecretsLoader } from './secrets-loader';
 
@@ -58,13 +59,33 @@ program
                 env: process.env,
             });
 
+            // Forward termination signals to the child so it can shut down
+            // gracefully. Without this, a SIGTERM/SIGINT delivered only to the
+            // wrapper (e.g. `kill <pid>`, pm2/systemd/docker stop) never reaches
+            // the actual process, leaving it running.
+            const forwardedSignals: NodeJS.Signals[] = ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGQUIT'];
+            const forwardSignal = (signal: NodeJS.Signals) => {
+                if (!child.killed) {
+                    child.kill(signal);
+                }
+            };
+            for (const signal of forwardedSignals) {
+                process.on(signal, () => forwardSignal(signal));
+            }
+
             child.on('error', (error) => {
                 if (!quiet) console.error('Failed to execute command: ', error);
                 process.exit(1);
             });
 
-            child.on('exit', (code) => {
-                process.exit(code || 0);
+            child.on('exit', (code, signal) => {
+                // Mirror the child's fate: if it was killed by a signal, exit
+                // with the conventional 128 + signal-number code.
+                if (signal) {
+                    const signalNumber = (os.constants.signals as Record<string, number>)[signal] ?? 0;
+                    process.exit(128 + signalNumber);
+                }
+                process.exit(code ?? 0);
             });
         } catch (error: any) {
             if (!quiet) console.error('Failed to load secrets: ', error);
